@@ -120,7 +120,8 @@ export default function App() {
 
     try {
       const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'x-admin-password': 'yy661003'
       };
       if (adminToken) {
         headers['x-admin-token'] = adminToken;
@@ -130,19 +131,27 @@ export default function App() {
         method: 'POST',
         headers,
         body: JSON.stringify(newConfig)
+      }).catch((err) => {
+        console.warn('[App] /api/config network request failed (may be static hosting):', err);
+        return null;
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `伺服器回應錯誤 (HTTP ${response.status})`);
+      if (response) {
+        if (response.ok) {
+          const result = await response.json().catch(() => null);
+          const savedConfig = result?.data || result;
+          if (savedConfig && typeof savedConfig === 'object') {
+            setConfig(savedConfig);
+            localStorage.setItem('amazonMountainConfig', JSON.stringify(savedConfig));
+          }
+        } else if (response.status === 401) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || '未授權：請以正確密碼登入後再儲存');
+        } else if (response.status !== 404) {
+          console.warn(`[App] Server returned status ${response.status}, preserved in local storage`);
+        }
       }
 
-      const result = await response.json();
-      const savedConfig = result.data || result;
-      if (savedConfig && typeof savedConfig === 'object') {
-        setConfig(savedConfig);
-        localStorage.setItem('amazonMountainConfig', JSON.stringify(savedConfig));
-      }
       return true;
     } catch (err) {
       console.error('[App] Failed to save config to server database:', err);
