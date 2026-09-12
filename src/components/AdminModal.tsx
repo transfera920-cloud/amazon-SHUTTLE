@@ -3,11 +3,8 @@ import { SiteConfig, FeatureCard } from '../types';
 import { DEFAULT_CONFIG, parseTrustItems } from '../data/mountainData';
 import {
   X,
-  Lock,
   CheckCircle2,
   RotateCcw,
-  Eye,
-  EyeOff,
   Plus,
   Trash2,
   ArrowUp,
@@ -18,16 +15,14 @@ import {
   FileText,
   Info,
   Loader2,
-  Database,
-  LogOut,
-  ShieldCheck
+  Database
 } from 'lucide-react';
 
 interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   config: SiteConfig;
-  onSave: (newConfig: SiteConfig, adminToken?: string) => Promise<boolean> | void;
+  onSave: (newConfig: SiteConfig) => Promise<boolean> | void;
 }
 
 const AVAILABLE_ICONS = [
@@ -60,16 +55,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   config,
   onSave
 }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return Boolean(sessionStorage.getItem('amazonAdminToken'));
-  });
-  const [adminToken, setAdminToken] = useState<string>(() => {
-    return sessionStorage.getItem('amazonAdminToken') || '';
-  });
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
   const [activeTab, setActiveTab] = useState<'basic' | 'about' | 'features' | 'terms'>('features');
 
   // Initialize form state
@@ -92,11 +77,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   // Sync formData whenever modal is opened or config prop updates
   useEffect(() => {
     if (isOpen) {
-      const storedToken = sessionStorage.getItem('amazonAdminToken');
-      if (storedToken) {
-        setAdminToken(storedToken);
-        setIsAuthenticated(true);
-      }
       const features = config.features && config.features.length > 0
         ? config.features
         : DEFAULT_CONFIG.features;
@@ -105,7 +85,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         ...config,
         features
       });
-      setErrorMsg('');
       setSavedSuccess(false);
       setIsSaving(false);
       setDeleteConfirmIdx(null);
@@ -114,64 +93,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   }, [isOpen, config]);
 
   if (!isOpen) return null;
-
-  const handleLogout = () => {
-    sessionStorage.removeItem('amazonAdminToken');
-    setAdminToken('');
-    setIsAuthenticated(false);
-    setPassword('');
-    setErrorMsg('');
-    setActionNotice('已登出管理身分');
-    setTimeout(() => setActionNotice(''), 3000);
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const rawPwd = password.trim();
-    // Normalize full-width characters (from Chinese IME) to standard half-width
-    const inputPwd = rawPwd.replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).trim();
-    if (!inputPwd) {
-      setErrorMsg('請輸入管理密碼');
-      return;
-    }
-
-    setIsVerifying(true);
-    setErrorMsg('');
-
-    try {
-      const response = await fetch('/api/admin/verify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ password: inputPwd })
-      });
-
-      const result = await response.json().catch(() => null);
-
-      if (response.ok && result && result.success && result.token) {
-        setIsAuthenticated(true);
-        setAdminToken(result.token);
-        sessionStorage.setItem('amazonAdminToken', result.token);
-        setErrorMsg('');
-        const features = config.features && config.features.length > 0
-          ? config.features
-          : DEFAULT_CONFIG.features;
-        setFormData({
-          ...DEFAULT_CONFIG,
-          ...config,
-          features
-        });
-      } else {
-        setErrorMsg(result?.error || '密碼錯誤！請輸入正確的管理密碼。');
-      }
-    } catch (err) {
-      console.error('Admin authentication error:', err);
-      setErrorMsg('伺服器驗證連線失敗，請檢查網路連線或稍後再試。');
-    } finally {
-      setIsVerifying(false);
-    }
-  };
 
   const handleInputChange = (field: keyof SiteConfig, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -253,7 +174,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
     setIsSaving(true);
     try {
-      await onSave(finalData, adminToken);
+      await onSave(finalData);
       setIsSaving(false);
       setSavedSuccess(true);
       setTimeout(() => {
@@ -264,12 +185,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       console.error('Error saving config:', err);
       setIsSaving(false);
       const msg = err?.message || '';
-      if (msg.includes('401') || msg.includes('未授權')) {
-        setActionNotice('登入身分憑證已失效，請重新登入管理員。');
-        handleLogout();
-      } else {
-        setActionNotice(msg || '儲存至伺服器時發生問題，已暫存至瀏覽器快取。');
-      }
+      setActionNotice(msg || '儲存至伺服器時發生問題，已暫存至瀏覽器快取。');
     }
   };
 
@@ -293,110 +209,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   <Database className="w-3 h-3 text-emerald-300" />
                   <span>Cloud Firestore 永久雲端同步</span>
                 </span>
-                {isAuthenticated && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-700/80 text-white text-[10px] font-medium border border-emerald-500/50">
-                    <ShieldCheck className="w-3 h-3 text-emerald-300" />
-                    <span>伺服器安全已驗證</span>
-                  </span>
-                )}
               </div>
-              <p className="text-xs text-emerald-200">編輯內容儲存後由後端驗證權限並寫入 Firebase Firestore，永久保存且跨裝置即時同步</p>
+              <p className="text-xs text-emerald-200">直接編輯內容，儲存後立即寫入 Firebase Firestore，永久保存且跨裝置即時同步</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {isAuthenticated && (
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="flex items-center gap-1 text-xs text-emerald-200 hover:text-white px-2 py-1 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
-                title="登出管理員身分"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">登出</span>
-              </button>
-            )}
-            <button
-              onClick={onClose}
-              className="text-white/80 hover:text-white p-1.5 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
-              title="關閉"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="text-white/80 hover:text-white p-1.5 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
+            title="關閉"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Content */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-          {!isAuthenticated ? (
-            <form onSubmit={handleLogin} className="space-y-4 py-8 max-w-sm mx-auto">
-              <div className="text-center mb-6">
-                <div className="w-14 h-14 bg-emerald-100 text-[#1e3a29] rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
-                  <Lock className="w-7 h-7" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-800">請輸入管理員密碼</h3>
-                <p className="text-xs text-gray-500 mt-1">伺服器端金鑰保護，密碼不暴露於前端代碼</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  管理密碼
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="請輸入密碼"
-                    disabled={isVerifying}
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    autoComplete="current-password"
-                    className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1e3a29] focus:outline-hidden pr-10 disabled:bg-gray-100"
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {errorMsg && (
-                <div className="p-3 text-xs bg-red-50 text-red-700 rounded-lg border border-red-200">
-                  {errorMsg}
-                </div>
-              )}
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={isVerifying}
-                  className="flex-1 bg-[#1e3a29] hover:bg-[#284f38] disabled:bg-gray-400 text-white py-2.5 rounded-lg text-sm font-bold transition-colors cursor-pointer flex items-center justify-center gap-2"
-                >
-                  {isVerifying ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-white" />
-                      <span>伺服器驗證中...</span>
-                    </>
-                  ) : (
-                    <span>解鎖並進入後台</span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2.5 border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                >
-                  取消
-                </button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleSave} className="space-y-5">
+          <form onSubmit={handleSave} className="space-y-5">
               {savedSuccess && (
                 <div className="p-3 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded-lg flex items-center gap-2 text-sm animate-pulse">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -936,7 +764,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </div>
               </div>
             </form>
-          )}
         </div>
       </div>
     </div>

@@ -109,17 +109,17 @@ export default function App() {
   }, []);
 
   const handleSaveConfig = async (newConfig: SiteConfig, adminToken?: string): Promise<boolean> => {
-    if (!adminToken) {
-      throw new Error('未授權：缺少管理員授權憑證，請先登入管理員後台。');
-    }
-
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+
       const response = await fetch('/api/config', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-token': adminToken
-        },
+        headers,
         body: JSON.stringify(newConfig)
       });
 

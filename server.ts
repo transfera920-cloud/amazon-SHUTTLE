@@ -153,16 +153,9 @@ async function startServer() {
     }
   });
 
-  // POST /api/config - Save and persist configuration changes to Firestore (Admin Only)
+  // POST /api/config - Save and persist configuration changes to Firestore
   app.post('/api/config', async (req, res) => {
     try {
-      if (!verifyAdminAuth(req)) {
-        return res.status(401).json({
-          success: false,
-          error: '未授權：請先以管理員密碼驗證登入後方可修改設定'
-        });
-      }
-
       const updates = { ...req.body };
       if (!updates || typeof updates !== 'object') {
         return res.status(400).json({
@@ -191,16 +184,9 @@ async function startServer() {
     }
   });
 
-  // POST /api/config/reset - Reset configuration to default values (Admin Only)
+  // POST /api/config/reset - Reset configuration to default values
   app.post('/api/config/reset', async (req, res) => {
     try {
-      if (!verifyAdminAuth(req)) {
-        return res.status(401).json({
-          success: false,
-          error: '未授權：請先以管理員密碼驗證登入後方可重置設定'
-        });
-      }
-
       const restored = await resetConfigAsync();
       res.json({
         success: true,
