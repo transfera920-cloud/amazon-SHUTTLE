@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import express from 'express';
 import path from 'path';
 import crypto from 'crypto';
@@ -21,16 +22,54 @@ async function startServer() {
     }
   };
 
+  const getAdminPassword = (): string => {
+    return (process.env.ADMIN_PASSWORD || 'Adm_vcZePIMJNXU2J3je')
+      .replace(/^["']|["']$/g, '')
+      .trim();
+  };
+
+  const normalizePasswordString = (str: string): string => {
+    return str
+      .trim()
+      .replace(/^["']|["']$/g, '')
+      .replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
+  };
+
   // Helper to verify admin authorization via valid session token
   const verifyAdminAuth = (req: express.Request): boolean => {
     cleanExpiredSessions();
     const token = (req.headers['x-admin-token'] as string) || (req.headers['authorization']?.replace(/^Bearer\s+/i, ''));
-    if (token && adminSessions.has(token)) {
+    if (!token || typeof token !== 'string') {
+      return false;
+    }
+
+    if (adminSessions.has(token)) {
       const expiry = adminSessions.get(token)!;
       if (expiry > Date.now()) {
         return true;
       }
       adminSessions.delete(token);
+    }
+
+    // Stateless HMAC verification fallback (supports server restarts or container scaling)
+    if (token.includes('.')) {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const [randPart, expStr, sig] = parts;
+        const expTime = Number(expStr);
+        if (!isNaN(expTime) && expTime > Date.now()) {
+          const expectedSig = crypto
+            .createHmac('sha256', getAdminPassword())
+            .update(`${randPart}.${expStr}`)
+            .digest('hex');
+          const bufA = Buffer.from(sig);
+          const bufB = Buffer.from(expectedSig);
+          if (bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB)) {
+            adminSessions.set(token, expTime);
+            return true;
+          }
+        }
+      }
     }
 
     return false;
@@ -51,7 +90,6 @@ async function startServer() {
   app.post('/api/admin/verify', (req, res) => {
     try {
       const { password } = req.body || {};
-      const expectedPassword = process.env.ADMIN_PASSWORD || 'yy661003';
 
       if (!password || typeof password !== 'string') {
         return res.status(400).json({
@@ -60,9 +98,13 @@ async function startServer() {
         });
       }
 
-      const bufA = Buffer.from(password);
-      const bufB = Buffer.from(expectedPassword);
-      const isValid = bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+      const inputNormalized = normalizePasswordString(password);
+      const expectedNormalized = normalizePasswordString(getAdminPassword());
+
+      // Support exact and case-insensitive match (for mobile auto-capitalization e.g. Yy661003)
+      const isExact = inputNormalized === expectedNormalized;
+      const isCaseInsensitive = inputNormalized.toLowerCase() === expectedNormalized.toLowerCase();
+      const isValid = isExact || isCaseInsensitive;
 
       if (!isValid) {
         return res.status(401).json({
@@ -71,10 +113,13 @@ async function startServer() {
         });
       }
 
-      // Generate a cryptographically secure 24-hour session token
+      // Generate a cryptographically secure 24-hour signed session token
       cleanExpiredSessions();
-      const token = crypto.randomBytes(32).toString('hex');
+      const randPart = crypto.randomBytes(16).toString('hex');
       const expiry = Date.now() + 24 * 60 * 60 * 1000;
+      const payload = `${randPart}.${expiry}`;
+      const sig = crypto.createHmac('sha256', expectedNormalized).update(payload).digest('hex');
+      const token = `${payload}.${sig}`;
       adminSessions.set(token, expiry);
 
       return res.json({

@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 import fs from 'fs';
@@ -8,7 +10,12 @@ import { DEFAULT_CONFIG } from '../src/data/mountainData';
 // Path to local backup cache file
 const DATA_DIR = path.join(process.cwd(), 'data');
 const CONFIG_FILE = path.join(DATA_DIR, 'site-config.json');
-const FIRESTORE_SERVER_SECRET = process.env.FIRESTORE_SERVER_SECRET || 'amz_srv_sec_f98c21a4';
+
+const getFirestoreServerSecret = (): string => {
+  return (process.env.FIRESTORE_SERVER_SECRET || 'fss_C2NeQLY4aNj3odkuHIcQdyZs')
+    .replace(/^["']|["']$/g, '')
+    .trim();
+};
 
 // In-memory cache
 let cachedConfig: SiteConfig | null = null;
@@ -110,7 +117,7 @@ export async function getConfigAsync(): Promise<SiteConfig> {
         const initial = cachedConfig || DEFAULT_CONFIG;
         await setDoc(configDocRef, {
           ...initial,
-          _serverSecret: FIRESTORE_SERVER_SECRET,
+          _serverSecret: getFirestoreServerSecret(),
           updatedAt: new Date().toISOString()
         });
         return initial;
@@ -143,7 +150,7 @@ export async function updateConfigAsync(updates: Partial<SiteConfig>): Promise<S
       const configDocRef = doc(db, 'settings', 'siteConfig');
       await setDoc(configDocRef, {
         ...newConfig,
-        _serverSecret: FIRESTORE_SERVER_SECRET,
+        _serverSecret: getFirestoreServerSecret(),
         updatedAt: new Date().toISOString()
       }, { merge: true });
       console.log('[Firestore] Successfully persisted siteConfig to Cloud Firestore!');
@@ -171,7 +178,7 @@ export async function resetConfigAsync(): Promise<SiteConfig> {
       const configDocRef = doc(db, 'settings', 'siteConfig');
       await setDoc(configDocRef, {
         ...defaultConfig,
-        _serverSecret: FIRESTORE_SERVER_SECRET,
+        _serverSecret: getFirestoreServerSecret(),
         updatedAt: new Date().toISOString()
       });
       console.log('[Firestore] Successfully reset siteConfig in Cloud Firestore!');

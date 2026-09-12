@@ -127,7 +127,9 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const inputPwd = password.trim();
+    const rawPwd = password.trim();
+    // Normalize full-width characters (from Chinese IME) to standard half-width
+    const inputPwd = rawPwd.replace(/[\uff01-\uff5e]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).trim();
     if (!inputPwd) {
       setErrorMsg('請輸入管理密碼');
       return;
@@ -346,6 +348,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="請輸入密碼"
                     disabled={isVerifying}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    autoComplete="current-password"
                     className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1e3a29] focus:outline-hidden pr-10 disabled:bg-gray-100"
                     autoFocus
                   />
