@@ -1,0 +1,6 @@
+{
+  "name": "亞馬遜高山接駁",
+  "description": "亞馬遜高山接駁提供專業、安全、舒適的高山登山包車與接駁服務。涵蓋百岳登山口、合歡山、雪山、嘉明湖、玉山等接駁，提供價格估算、D0住宿、下山慶功宴及道路管制即時查詢！",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
