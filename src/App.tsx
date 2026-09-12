@@ -63,12 +63,90 @@ export default function App() {
     'none' | 'price' | 'd0' | 'feast' | 'traffic' | 'terms'
   >('none');
 
-  const handleSaveConfig = (newConfig: SiteConfig) => {
+  // Fetch latest config from server API on mount and on window focus
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchServerConfig = async () => {
+      try {
+        const response = await fetch('/api/config');
+        if (!response.ok) return;
+        const result = await response.json();
+        const serverData = result.data || result;
+        if (isMounted && serverData && typeof serverData === 'object') {
+          setConfig((prev) => {
+            const features = Array.isArray(serverData.features) && serverData.features.length > 0
+              ? serverData.features
+              : (prev.features && prev.features.length > 0 ? prev.features : DEFAULT_CONFIG.features);
+            return {
+              ...DEFAULT_CONFIG,
+              ...prev,
+              ...serverData,
+              features
+            };
+          });
+          try {
+            localStorage.setItem('amazonMountainConfig', JSON.stringify(serverData));
+          } catch {
+            // ignore localStorage quota errors
+          }
+        }
+      } catch (err) {
+        console.warn('[App] Could not fetch server config, using local cache:', err);
+      }
+    };
+
+    fetchServerConfig();
+
+    const handleFocus = () => {
+      fetchServerConfig();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
+  const handleSaveConfig = async (newConfig: SiteConfig, adminToken?: string): Promise<boolean> => {
+    // Optimistically update local UI
     setConfig(newConfig);
     try {
       localStorage.setItem('amazonMountainConfig', JSON.stringify(newConfig));
-    } catch (e) {
-      console.error('Failed to save amazonMountainConfig to localStorage', e);
+    } catch {
+      // ignore
+    }
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (adminToken) {
+        headers['x-admin-token'] = adminToken;
+      }
+
+      const response = await fetch('/api/config', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(newConfig)
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `伺服器回應錯誤 (HTTP ${response.status})`);
+      }
+
+      const result = await response.json();
+      const savedConfig = result.data || result;
+      if (savedConfig && typeof savedConfig === 'object') {
+        setConfig(savedConfig);
+        localStorage.setItem('amazonMountainConfig', JSON.stringify(savedConfig));
+      }
+      return true;
+    } catch (err) {
+      console.error('[App] Failed to save config to server database:', err);
+      throw err;
     }
   };
 

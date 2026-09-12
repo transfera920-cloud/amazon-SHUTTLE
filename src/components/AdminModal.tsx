@@ -16,14 +16,18 @@ import {
   Sliders,
   Layers,
   FileText,
-  Info
+  Info,
+  Loader2,
+  Database,
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
 
 interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   config: SiteConfig;
-  onSave: (newConfig: SiteConfig) => void;
+  onSave: (newConfig: SiteConfig, adminToken?: string) => Promise<boolean> | void;
 }
 
 const AVAILABLE_ICONS = [
@@ -56,7 +60,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   config,
   onSave
 }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return Boolean(sessionStorage.getItem('amazonAdminToken'));
+  });
+  const [adminToken, setAdminToken] = useState<string>(() => {
+    return sessionStorage.getItem('amazonAdminToken') || '';
+  });
+  const [isVerifying, setIsVerifying] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -74,6 +84,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     };
   });
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmIdx, setDeleteConfirmIdx] = useState<number | null>(null);
   const [actionNotice, setActionNotice] = useState<string>('');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -81,6 +92,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   // Sync formData whenever modal is opened or config prop updates
   useEffect(() => {
     if (isOpen) {
+      const storedToken = sessionStorage.getItem('amazonAdminToken');
+      if (storedToken) {
+        setAdminToken(storedToken);
+        setIsAuthenticated(true);
+      }
       const features = config.features && config.features.length > 0
         ? config.features
         : DEFAULT_CONFIG.features;
@@ -91,6 +107,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       });
       setErrorMsg('');
       setSavedSuccess(false);
+      setIsSaving(false);
       setDeleteConfirmIdx(null);
       setShowResetConfirm(false);
     }
@@ -98,21 +115,59 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogout = () => {
+    sessionStorage.removeItem('amazonAdminToken');
+    setAdminToken('');
+    setIsAuthenticated(false);
+    setPassword('');
+    setErrorMsg('');
+    setActionNotice('已登出管理身分');
+    setTimeout(() => setActionNotice(''), 3000);
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === 'yy661003') {
-      setIsAuthenticated(true);
-      setErrorMsg('');
-      const features = config.features && config.features.length > 0
-        ? config.features
-        : DEFAULT_CONFIG.features;
-      setFormData({
-        ...DEFAULT_CONFIG,
-        ...config,
-        features
+    if (!password.trim()) {
+      setErrorMsg('請輸入管理密碼');
+      return;
+    }
+
+    setIsVerifying(true);
+    setErrorMsg('');
+
+    try {
+      const response = await fetch('/api/admin/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: password.trim() })
       });
-    } else {
-      setErrorMsg('密碼錯誤！請輸入正確的管理密碼。');
+
+      const result = await response.json();
+      if (response.ok && result.success) {
+        setIsAuthenticated(true);
+        setAdminToken(result.token || '');
+        if (result.token) {
+          sessionStorage.setItem('amazonAdminToken', result.token);
+        }
+        setErrorMsg('');
+        const features = config.features && config.features.length > 0
+          ? config.features
+          : DEFAULT_CONFIG.features;
+        setFormData({
+          ...DEFAULT_CONFIG,
+          ...config,
+          features
+        });
+      } else {
+        setErrorMsg(result.error || '密碼錯誤！請輸入正確的管理密碼。');
+      }
+    } catch (err) {
+      console.error('Admin authentication error:', err);
+      setErrorMsg('伺服器驗證連線失敗，請稍後再試。');
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -174,7 +229,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     });
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Sync legacy card fields with top features
@@ -195,12 +250,26 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       card4Url: f[3]?.url || formData.card4Url,
     };
 
-    onSave(finalData);
-    setSavedSuccess(true);
-    setTimeout(() => {
-      setSavedSuccess(false);
-      onClose();
-    }, 800);
+    setIsSaving(true);
+    try {
+      await onSave(finalData, adminToken);
+      setIsSaving(false);
+      setSavedSuccess(true);
+      setTimeout(() => {
+        setSavedSuccess(false);
+        onClose();
+      }, 900);
+    } catch (err: any) {
+      console.error('Error saving config:', err);
+      setIsSaving(false);
+      const msg = err?.message || '';
+      if (msg.includes('401') || msg.includes('未授權')) {
+        setActionNotice('登入身分憑證已失效，請重新登入管理員。');
+        handleLogout();
+      } else {
+        setActionNotice(msg || '儲存至伺服器時發生問題，已暫存至瀏覽器快取。');
+      }
+    }
   };
 
   const handleResetDefaults = () => {
@@ -214,20 +283,45 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       <div className="relative w-full max-w-3xl bg-white rounded-xl shadow-2xl border-2 border-[#1e3a29] overflow-hidden my-4 max-h-[92vh] flex flex-col">
         {/* Header */}
         <div className="bg-[#1e3a29] text-white px-5 sm:px-6 py-4 flex items-center justify-between shrink-0 shadow-xs">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <span className="text-xl">⚙️</span>
             <div>
-              <h2 className="text-base sm:text-lg font-bold">亞馬遜高山接駁 頁面動態管理後台</h2>
-              <p className="text-xs text-emerald-200">即時編輯前台功能區塊、關於內容、服務條款與聯絡資訊</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold">亞馬遜高山接駁 頁面動態管理後台</h2>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-800/90 text-emerald-200 text-[10px] font-medium border border-emerald-600/40">
+                  <Database className="w-3 h-3 text-emerald-300" />
+                  <span>Cloud Firestore 永久雲端同步</span>
+                </span>
+                {isAuthenticated && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-700/80 text-white text-[10px] font-medium border border-emerald-500/50">
+                    <ShieldCheck className="w-3 h-3 text-emerald-300" />
+                    <span>伺服器安全已驗證</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-emerald-200">編輯內容儲存後由後端驗證權限並寫入 Firebase Firestore，永久保存且跨裝置即時同步</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-white/80 hover:text-white p-1.5 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
-            title="關閉"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex items-center gap-1 text-xs text-emerald-200 hover:text-white px-2 py-1 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
+                title="登出管理員身分"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">登出</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="text-white/80 hover:text-white p-1.5 rounded-md hover:bg-white/10 transition-colors cursor-pointer"
+              title="關閉"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -239,7 +333,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   <Lock className="w-7 h-7" />
                 </div>
                 <h3 className="text-lg font-bold text-gray-800">請輸入管理員密碼</h3>
-                <p className="text-xs text-gray-500 mt-1">此處僅供站長或管理員維護前台內容</p>
+                <p className="text-xs text-gray-500 mt-1">伺服器端金鑰保護，密碼不暴露於前端代碼</p>
               </div>
 
               <div>
@@ -252,7 +346,8 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="請輸入密碼"
-                    className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1e3a29] focus:outline-hidden pr-10"
+                    disabled={isVerifying}
+                    className="w-full px-3.5 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#1e3a29] focus:outline-hidden pr-10 disabled:bg-gray-100"
                     autoFocus
                   />
                   <button
@@ -274,9 +369,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               <div className="flex gap-2 pt-2">
                 <button
                   type="submit"
-                  className="flex-1 bg-[#1e3a29] hover:bg-[#284f38] text-white py-2.5 rounded-lg text-sm font-bold transition-colors cursor-pointer"
+                  disabled={isVerifying}
+                  className="flex-1 bg-[#1e3a29] hover:bg-[#284f38] disabled:bg-gray-400 text-white py-2.5 rounded-lg text-sm font-bold transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
-                  解鎖並進入後台
+                  {isVerifying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>伺服器驗證中...</span>
+                    </>
+                  ) : (
+                    <span>解鎖並進入後台</span>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -825,9 +928,19 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-[#1e3a29] hover:bg-[#284f38] text-white rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+                    disabled={isSaving}
+                    className="px-5 py-2 bg-[#1e3a29] hover:bg-[#284f38] disabled:bg-gray-400 text-white rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    <span>💾 儲存並同步至前台</span>
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>儲存並同步中...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>💾 儲存並同步至前台</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

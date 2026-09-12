@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "SiteConfig": {
+      "title": "SiteConfig",
+      "description": "Global website configuration for Amazon Mountain shuttle service",
+      "type": "object",
+      "properties": {
+        "siteTitle": { "type": "string" },
+        "siteSlogan": { "type": "string" },
+        "lineUrl": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "trustBannerText": { "type": "string" },
+        "aboutContent": { "type": "string" },
+        "termsContent": { "type": "string" },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "desc": { "type": "string" },
+              "url": { "type": "string" },
+              "icon": { "type": "string" },
+              "actionText": { "type": "string" }
+            }
+          }
+        },
+        "footerText": { "type": "string" },
+        "footerUrl": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/settings/siteConfig": {
+      "schema": "SiteConfig",
+      "description": "Singleton configuration document for website settings"
+    }
+  }
+}
