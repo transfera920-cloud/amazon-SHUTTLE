@@ -65,32 +65,28 @@ export const DEFAULT_CONFIG: SiteConfig = {
       title: "價格估算系統",
       desc: "透明化高山包車資估算，快速試算包車費用",
       url: "price.html",
-      icon: "Calculator",
-      actionText: "開始估算車資"
+      icon: "Calculator"
     },
     {
       id: "d0",
       title: "D0 住宿查詢",
       desc: "登山口周邊優質民宿與接駁合作住宿推薦",
       url: "d0-hotel.html",
-      icon: "Hotel",
-      actionText: "瀏覽精選民宿"
+      icon: "Hotel"
     },
     {
       id: "feast",
       title: "下山慶功宴查詢",
       desc: "精選完登下山補給合菜與在地美食餐廳",
       url: "feast.html",
-      icon: "Utensils",
-      actionText: "查看慶功餐廳"
+      icon: "Utensils"
     },
     {
       id: "traffic",
       title: "道路路線管制查詢",
       desc: "即時掌握林道與高山省道最新施工管制時間",
       url: "traffic.html",
-      icon: "AlertTriangle",
-      actionText: "查詢即時管制"
+      icon: "AlertTriangle"
     }
   ],
   footerText: "條款與服務須知",

@@ -12,7 +12,6 @@ import {
   Phone,
   Settings,
   ExternalLink,
-  ChevronRight,
   ShieldCheck,
   Compass,
   Calculator,
@@ -110,45 +109,33 @@ export default function App() {
   }, []);
 
   const handleSaveConfig = async (newConfig: SiteConfig, adminToken?: string): Promise<boolean> => {
-    // Optimistically update local UI
-    setConfig(newConfig);
-    try {
-      localStorage.setItem('amazonMountainConfig', JSON.stringify(newConfig));
-    } catch {
-      // ignore
+    if (!adminToken) {
+      throw new Error('未授權：缺少管理員授權憑證，請先登入管理員後台。');
     }
 
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'x-admin-password': 'yy661003'
-      };
-      if (adminToken) {
-        headers['x-admin-token'] = adminToken;
-      }
-
       const response = await fetch('/api/config', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-token': adminToken
+        },
         body: JSON.stringify(newConfig)
-      }).catch((err) => {
-        console.warn('[App] /api/config network request failed (may be static hosting):', err);
-        return null;
       });
 
-      if (response) {
-        if (response.ok) {
-          const result = await response.json().catch(() => null);
-          const savedConfig = result?.data || result;
-          if (savedConfig && typeof savedConfig === 'object') {
-            setConfig(savedConfig);
-            localStorage.setItem('amazonMountainConfig', JSON.stringify(savedConfig));
-          }
-        } else if (response.status === 401) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || '未授權：請以正確密碼登入後再儲存');
-        } else if (response.status !== 404) {
-          console.warn(`[App] Server returned status ${response.status}, preserved in local storage`);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `伺服器拒絕儲存 (HTTP ${response.status})`);
+      }
+
+      const result = await response.json().catch(() => null);
+      const savedConfig = result?.data || result || newConfig;
+      if (savedConfig && typeof savedConfig === 'object') {
+        setConfig(savedConfig);
+        try {
+          localStorage.setItem('amazonMountainConfig', JSON.stringify(savedConfig));
+        } catch {
+          // ignore localStorage write failure
         }
       }
 
@@ -298,27 +285,20 @@ export default function App() {
               id={`feature-card-${idx}`}
               href={card.url}
               onClick={(e) => handleFeatureCardClick(e, card.url)}
-              className="card group bg-white p-6 rounded-xl text-center shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all border border-gray-100 flex flex-col justify-between cursor-pointer"
+              className="card group bg-white p-6 rounded-xl text-center shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all border border-gray-100 flex flex-col items-center cursor-pointer"
             >
-              <div>
-                <div className="mb-3.5 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center transition-colors">
-                    {renderCardIcon(card.icon)}
-                  </div>
+              <div className="mb-3.5 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center transition-colors">
+                  {renderCardIcon(card.icon)}
                 </div>
-
-                <h3 className="text-lg font-bold text-[#1e3a29] mb-2 group-hover:text-emerald-700 transition-colors">
-                  {card.title}
-                </h3>
-                <p className="text-xs text-gray-600 leading-relaxed min-h-[36px]">
-                  {card.desc}
-                </p>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-center gap-1 text-xs font-bold text-emerald-700">
-                <span>{card.actionText || '查看詳情'}</span>
-                <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </div>
+              <h3 className="text-lg font-bold text-[#1e3a29] mb-2 group-hover:text-emerald-700 transition-colors">
+                {card.title}
+              </h3>
+              <p className="text-xs text-gray-600 leading-relaxed">
+                {card.desc}
+              </p>
             </a>
           ))}
         </div>

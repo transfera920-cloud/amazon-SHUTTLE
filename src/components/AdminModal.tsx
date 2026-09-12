@@ -133,40 +133,24 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       return;
     }
 
-    const isDirectMatch = (inputPwd === 'yy661003');
     setIsVerifying(true);
     setErrorMsg('');
 
     try {
-      let serverApproved = false;
-      let token = '';
+      const response = await fetch('/api/admin/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: inputPwd })
+      });
 
-      // Try server-side verification if server endpoint is available
-      try {
-        const response = await fetch('/api/admin/verify', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ password: inputPwd })
-        });
+      const result = await response.json().catch(() => null);
 
-        if (response.ok) {
-          const result = await response.json().catch(() => null);
-          if (result && result.success) {
-            serverApproved = true;
-            token = result.token || '';
-          }
-        }
-      } catch (networkErr) {
-        console.warn('Backend verification unavailable, using client verification:', networkErr);
-      }
-
-      if (isDirectMatch || serverApproved) {
+      if (response.ok && result && result.success && result.token) {
         setIsAuthenticated(true);
-        const effectiveToken = token || ('admin_session_' + Date.now());
-        setAdminToken(effectiveToken);
-        sessionStorage.setItem('amazonAdminToken', effectiveToken);
+        setAdminToken(result.token);
+        sessionStorage.setItem('amazonAdminToken', result.token);
         setErrorMsg('');
         const features = config.features && config.features.length > 0
           ? config.features
@@ -177,19 +161,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
           features
         });
       } else {
-        setErrorMsg('密碼錯誤！請輸入正確的管理密碼。');
+        setErrorMsg(result?.error || '密碼錯誤！請輸入正確的管理密碼。');
       }
     } catch (err) {
       console.error('Admin authentication error:', err);
-      if (isDirectMatch) {
-        setIsAuthenticated(true);
-        const fallbackToken = 'admin_session_' + Date.now();
-        setAdminToken(fallbackToken);
-        sessionStorage.setItem('amazonAdminToken', fallbackToken);
-        setErrorMsg('');
-      } else {
-        setErrorMsg('密碼錯誤！請輸入正確的管理密碼。');
-      }
+      setErrorMsg('伺服器驗證連線失敗，請檢查網路連線或稍後再試。');
     } finally {
       setIsVerifying(false);
     }
@@ -207,8 +183,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       title: '新自訂功能區塊',
       desc: '請在此輸入此功能區塊的詳細介紹與說明文字',
       url: 'price.html',
-      icon: 'Sparkles',
-      actionText: '查看詳情'
+      icon: 'Sparkles'
     };
     setFormData(prev => ({
       ...prev,
@@ -674,20 +649,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                                 required
                               />
                             </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-700 mb-1">
-                              底部行動按鈕文字：
-                            </label>
-                            <input
-                              type="text"
-                              value={feature.actionText || '查看詳情'}
-                              onChange={(e) => handleFeatureChange(idx, 'actionText', e.target.value)}
-                              placeholder="例如：開始估算車資、瀏覽精選民宿、立即查詢"
-                              className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-1 focus:ring-[#1e3a29] focus:outline-hidden"
-                            />
-                            <p className="text-[11px] text-gray-400 mt-1">卡片底部點擊指引文字</p>
                           </div>
                         </div>
                       </div>

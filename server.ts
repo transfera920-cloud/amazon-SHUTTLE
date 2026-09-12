@@ -20,7 +20,7 @@ async function startServer() {
     }
   };
 
-  // Helper to verify admin authorization
+  // Helper to verify admin authorization via valid session token
   const verifyAdminAuth = (req: express.Request): boolean => {
     cleanExpiredSessions();
     const token = (req.headers['x-admin-token'] as string) || (req.headers['authorization']?.replace(/^Bearer\s+/i, ''));
@@ -30,17 +30,6 @@ async function startServer() {
         return true;
       }
       adminSessions.delete(token);
-    }
-
-    // Direct password check via header or body
-    const reqPassword = (req.headers['x-admin-password'] as string) || req.body?.adminPassword;
-    const expectedPassword = process.env.ADMIN_PASSWORD || 'yy661003';
-    if (reqPassword && typeof reqPassword === 'string') {
-      const bufA = Buffer.from(reqPassword);
-      const bufB = Buffer.from(expectedPassword);
-      if (bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB)) {
-        return true;
-      }
     }
 
     return false;
